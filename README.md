@@ -39,12 +39,31 @@ uv run mcp_cube_server
 
 **Required:**
 - `--endpoint` / `CUBE_ENDPOINT`: Cube API endpoint URL
-- `--api_secret` / `CUBE_API_SECRET`: JWT signing secret for authentication
+- `--api_secret` / `CUBE_API_SECRET`: Either a pre-generated API token from Cube Cloud or a JWT signing secret
 
 **Optional:**
 - `CUBE_TOKEN_PAYLOAD`: Additional JWT payload data (JSON string, defaults to `{}`)
 - `--log_dir`: Directory for log files
 - `--log_level`: Logging level (defaults to INFO)
+
+### Authentication Modes
+
+The server supports two authentication modes:
+
+**1. Pre-generated API Token (Recommended)**
+Use an API token from your Cube Cloud dashboard:
+```bash
+uv run mcp_cube_server --endpoint https://your-cube-instance.com --api_secret "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**2. JWT Signing Secret**
+Use a secret to generate JWT tokens dynamically:
+```bash
+export CUBE_TOKEN_PAYLOAD='{"user_id": "123", "roles": ["admin"]}'
+uv run mcp_cube_server --endpoint https://your-cube-instance.com --api_secret "your-jwt-signing-secret"
+```
+
+The server automatically detects which mode to use based on the format of the `api_secret` parameter.
 
 ### Type Checking
 

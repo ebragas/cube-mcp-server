@@ -34,8 +34,8 @@ mcp_cube_server --endpoint <cube_endpoint> --api_secret <api_secret>
 
 The server requires these environment variables or CLI arguments:
 - `CUBE_ENDPOINT` / `--endpoint`: Cube API endpoint URL
-- `CUBE_API_SECRET` / `--api_secret`: JWT signing secret
-- `CUBE_TOKEN_PAYLOAD` (optional): Additional JWT payload data
+- `CUBE_API_SECRET` / `--api_secret`: Either a pre-generated API token from Cube Cloud or a JWT signing secret
+- `CUBE_TOKEN_PAYLOAD` (optional): Additional JWT payload data (only used in JWT signing mode)
 
 ## Architecture Notes
 

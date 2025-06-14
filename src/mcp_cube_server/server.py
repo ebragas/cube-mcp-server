@@ -27,11 +27,26 @@ class CubeClient:
         self.token_payload = token_payload
         self.token = None
         self.logger = logger
+        self.is_pregenerated_token = self._detect_pregenerated_token()
         self._refresh_token()
         self.meta = self.describe()
 
+    def _detect_pregenerated_token(self):
+        """Detect if api_secret is actually a pre-generated JWT token"""
+        return len(self.api_secret.split('.')) == 3 and all(
+            part for part in self.api_secret.split('.')
+        )
+
     def _generate_token(self):
-        return jwt.encode(self.token_payload, self.api_secret, algorithm="HS256")
+        if self.is_pregenerated_token:
+            # Use the pre-generated token directly
+            return self.api_secret
+        else:
+            # Generate JWT with proper claims
+            payload = dict(self.token_payload)
+            payload['iat'] = int(time.time())
+            payload['exp'] = int(time.time()) + 3600  # 1 hour expiration
+            return jwt.encode(payload, self.api_secret, algorithm="HS256")
 
     def _refresh_token(self):
         self.token = self._generate_token()
@@ -56,11 +71,15 @@ class CubeClient:
 
             # Handle 403 responses by trying to refresh the token once
             if response.status_code == 403:
-                self.logger.warning("Received 403, attempting token refresh")
-                self._refresh_token()
-                headers = {"Authorization": self.token}  # Update headers with new token
-                response = requests.get(url, headers=headers, params=serialized_params)
-                return response.json()
+                if self.is_pregenerated_token:
+                    self.logger.error("Authentication failed with pre-generated token")
+                    return {"error": "Authentication failed. Please check your API token."}
+                else:
+                    self.logger.warning("Received 403, attempting token refresh")
+                    self._refresh_token()
+                    headers = {"Authorization": self.token}  # Update headers with new token
+                    response = requests.get(url, headers=headers, params=serialized_params)
+                    return response.json()
 
             if response.status_code != 200:
                 self.logger.error(f"Request failed with error: {str(response.json().get('error'))}")
