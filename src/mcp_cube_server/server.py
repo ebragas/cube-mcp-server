@@ -58,7 +58,9 @@ class CubeClient:
             if response.status_code == 403:
                 self.logger.warning("Received 403, attempting token refresh")
                 self._refresh_token()
-                return requests.get(url, headers=headers, params=serialized_params)
+                headers = {"Authorization": self.token}  # Update headers with new token
+                response = requests.get(url, headers=headers, params=serialized_params)
+                return response.json()
 
             if response.status_code != 200:
                 self.logger.error(f"Request failed with error: {str(response.json().get('error'))}")
