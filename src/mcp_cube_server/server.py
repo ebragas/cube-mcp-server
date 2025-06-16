@@ -4,7 +4,7 @@ from pydantic import ConfigDict
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent, EmbeddedResource, TextResourceContents
 import jwt
-from pydantic import BaseModel, Field, AnyUrl
+from pydantic import BaseModel, Field
 import requests
 import json
 import logging
@@ -315,7 +315,7 @@ def main(credentials, logger):
                 TextContent(type="text", text=yaml_output),
                 EmbeddedResource(
                     type="resource",
-                    resource=TextResourceContents(uri=AnyUrl(f"data://{data_id}"), text=json_output),
+                    resource=TextResourceContents(uri=f"data://{data_id}", text=json_output),  # type: ignore
                 ),
             ]
 
