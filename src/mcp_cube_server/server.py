@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import Annotated, Any, Literal, Optional, Union
+from pydantic import ConfigDict
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent, EmbeddedResource, TextResourceContents
 import jwt
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AnyUrl
 import requests
 import json
 import logging
@@ -48,14 +49,64 @@ class CubeClient:
             payload['exp'] = int(time.time()) + 3600  # 1 hour expiration
             return jwt.encode(payload, self.api_secret, algorithm="HS256")
 
+    def _sanitize_headers(self, headers: dict) -> dict:
+        """Sanitize headers by redacting Authorization token for safe logging"""
+        sanitized = headers.copy()
+        if 'Authorization' in sanitized:
+            sanitized['Authorization'] = '[REDACTED]'
+        return sanitized
+
+    def _validate_jwt_token(self, token: str) -> bool:
+        """Validate JWT token structure and basic claims without verifying signature"""
+        if not token:
+            return False
+        
+        try:
+            # For pre-generated tokens, do basic structure validation
+            if self.is_pregenerated_token:
+                parts = token.split('.')
+                return len(parts) == 3 and all(part for part in parts)
+            
+            # For generated tokens, decode without verification to check structure
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            
+            # Check required claims
+            required_claims = ['iat', 'exp']
+            if not all(claim in decoded for claim in required_claims):
+                return False
+                
+            # Check token expiration
+            import time
+            exp_claim = decoded.get('exp')
+            if exp_claim is None or exp_claim < time.time():
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"JWT token validation failed: {str(e)}")
+            return False
+
     def _refresh_token(self):
-        self.token = self._generate_token()
+        new_token = self._generate_token()
+        
+        # Validate the token before using it
+        if not self._validate_jwt_token(new_token):
+            self.logger.error("Generated token failed validation")
+            raise ValueError("Invalid token generated")
+            
+        self.token = new_token
+        self.logger.debug("Token refreshed successfully")
 
     def _request(self, route: Route, **params):
         request_time = time.time()
         headers = {"Authorization": self.token}
         url = f"{self.endpoint if self.endpoint[-1] != '/' else self.endpoint[:-1]}/{route}"
         serialized_params = {k: json.dumps(v) for k, v in params.items()}
+
+        # Log request details with sanitized headers
+        sanitized_headers = self._sanitize_headers(headers)
+        self.logger.debug(f"Making request to {url} with headers: {sanitized_headers}")
 
         try:
             response = requests.get(url, headers=headers, params=serialized_params)
@@ -78,6 +129,11 @@ class CubeClient:
                     self.logger.warning("Received 403, attempting token refresh")
                     self._refresh_token()
                     headers = {"Authorization": self.token}  # Update headers with new token
+                    
+                    # Log retry request with sanitized headers
+                    sanitized_headers = self._sanitize_headers(headers)
+                    self.logger.debug(f"Retrying request with refreshed token: {sanitized_headers}")
+                    
                     response = requests.get(url, headers=headers, params=serialized_params)
                     return response.json()
 
@@ -131,7 +187,7 @@ class Filter(BaseModel):
         description="Pair of dates ISO dates representing the start and end of the range. Alternatively, a string representing a relative date range of the form: 'last N days', 'today', 'yesterday', 'last year', etc.",
     )
 
-    model_config = {"exclude_none": True}
+    model_config = ConfigDict()
 
 
 class TimeDimension(BaseModel):
@@ -144,7 +200,7 @@ class TimeDimension(BaseModel):
         description="Pair of dates ISO dates representing the start and end of the range. Alternatively, a string representing a relative date range of the form: 'last N days', 'today', 'yesterday', 'last year', etc.",
     )
 
-    model_config = {"exclude_none": True}
+    model_config = ConfigDict()
 
 
 class Query(BaseModel):
@@ -163,7 +219,7 @@ class Query(BaseModel):
         description="Return results without grouping by dimensions. Instead, return all rows. This can be useful for fetching a single row by its ID as well.",
     )
 
-    model_config = {"exclude_none": True}
+    model_config = ConfigDict()
 
 
 def main(credentials, logger):
@@ -180,41 +236,43 @@ def main(credentials, logger):
             logger.error("Full response: %s", json.dumps(meta))
             return f"Error: Description of the data is not available: {error}, {meta}"
 
-        description = [
-            {
-                "name": cube.get("name"),
-                "title": cube.get("title"),
-                "description": cube.get("description"),
-                "dimensions": [
-                    {
-                        "name": dimension.get("name"),
-                        "title": dimension.get("shortTitle") or dimension.get("title"),
-                        "description": dimension.get("description"),
-                    }
-                    for dimension in cube.get("dimensions", [])
-                ],
-                "measures": [
-                    {
-                        "name": measure.get("name"),
-                        "title": measure.get("shortTitle") or measure.get("title"),
-                        "description": measure.get("description"),
-                    }
-                    for measure in cube.get("measures", [])
-                ],
-            }
-            for cube in meta.get("cubes", [])
-        ]
+        description = []
+        for cube in meta.get("cubes", []):
+            if isinstance(cube, dict):
+                description.append({
+                    "name": cube.get("name"),
+                    "title": cube.get("title"),
+                    "description": cube.get("description"),
+                    "dimensions": [
+                        {
+                            "name": dimension.get("name"),
+                            "title": dimension.get("shortTitle") or dimension.get("title"),
+                            "description": dimension.get("description"),
+                        }
+                        for dimension in cube.get("dimensions", [])
+                        if isinstance(dimension, dict)
+                    ],
+                    "measures": [
+                        {
+                            "name": measure.get("name"),
+                            "title": measure.get("shortTitle") or measure.get("title"),
+                            "description": measure.get("description"),
+                        }
+                        for measure in cube.get("measures", [])
+                        if isinstance(measure, dict)
+                    ],
+                })
         return "Here is a description of the data available via the read_data tool:\n\n" + yaml.dump(
             description, indent=2, sort_keys=True
         )
 
     @mcp.tool("describe_data")
-    def describe_data() -> str:
+    def describe_data() -> dict[str, str]:
         """Describe the data available in Cube."""
         return {"type": "text", "text": data_description()}
 
     @mcp.tool("read_data")
-    def read_data(query: Query) -> str:
+    def read_data(query: Query) -> Union[str, list[Union[TextContent, EmbeddedResource]]]:
         """Read data from Cube."""
         try:
             query_dict = query.model_dump(by_alias=True, exclude_none=True)
@@ -246,7 +304,7 @@ def main(credentials, logger):
                 TextContent(type="text", text=yaml_output),
                 EmbeddedResource(
                     type="resource",
-                    resource=TextResourceContents(uri=f"data://{data_id}", text=json_output, mimeType="application/json"),
+                    resource=TextResourceContents(uri=AnyUrl(f"data://{data_id}"), text=json_output),
                 ),
             ]
 
