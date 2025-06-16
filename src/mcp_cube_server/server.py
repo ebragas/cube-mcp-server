@@ -21,6 +21,7 @@ class CubeClient:
     Route = Literal["meta", "load"]
     max_wait_time = 10
     request_backoff = 1
+    request_timeout = 30  # seconds
 
     def __init__(self, endpoint: str, api_secret: str, token_payload: dict, logger: logging.Logger):
         self.endpoint = endpoint
@@ -133,7 +134,7 @@ class CubeClient:
         self.logger.debug(f"Making request to {url} with headers: {sanitized_headers}")
 
         try:
-            response = requests.get(url, headers=headers, params=serialized_params)
+            response = requests.get(url, headers=headers, params=serialized_params, timeout=self.request_timeout)
 
             # Handle "continue wait" responses
             while response.json().get("error") == "Continue wait":
@@ -142,7 +143,7 @@ class CubeClient:
                     return {"error": "Request timed out. Something may have gone wrong or the request may be too complex."}
                 self.logger.warning(f"Request incomplete, polling again in {self.request_backoff} second(s)")
                 time.sleep(self.request_backoff)
-                response = requests.get(url, headers=headers, params=serialized_params)
+                response = requests.get(url, headers=headers, params=serialized_params, timeout=self.request_timeout)
 
             # Handle 403 responses by trying to refresh the token once
             if response.status_code == 403:
@@ -158,7 +159,7 @@ class CubeClient:
                     sanitized_headers = self._sanitize_headers(headers)
                     self.logger.debug(f"Retrying request with refreshed token: {sanitized_headers}")
                     
-                    response = requests.get(url, headers=headers, params=serialized_params)
+                    response = requests.get(url, headers=headers, params=serialized_params, timeout=self.request_timeout)
                     return response.json()
 
             if response.status_code != 200:

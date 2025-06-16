@@ -46,7 +46,7 @@ except json.JSONDecodeError as e:
     return
 ```
 
-### 3. **Missing Request Timeouts** ⬜
+### 3. **Missing Request Timeouts** ✅
 **File:** `src/mcp_cube_server/server.py:112, 121, 137`
 
 **Issue:** HTTP requests lack timeout configuration, potentially causing indefinite hangs.
