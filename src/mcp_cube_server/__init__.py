@@ -57,10 +57,7 @@ def main():
     args, unknown = parser.parse_known_args()
     additional_kwargs = args_to_kwargs(unknown)
 
-    token_payload = json.loads(required["token_payload"])
-    for key, value in additional_kwargs.items():
-        token_payload[key] = value
-
+    # Setup logger first so it's available for error handling
     logger = logging.getLogger(__name__)
     logger.propagate = False
     logger.setLevel(args.log_level)
@@ -71,6 +68,15 @@ def main():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+    try:
+        token_payload = json.loads(required["token_payload"])
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON in token_payload (details hidden for security)")
+        return
+    
+    for key, value in additional_kwargs.items():
+        token_payload[key] = value
+
     if args.log_dir:
         file_handler = logging.FileHandler(
             os.path.join(args.log_dir, "mcp_cube_server.log")
@@ -78,15 +84,11 @@ def main():
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
-    try:
-        credentials = {
-            "endpoint": args.endpoint,
-            "api_secret": args.api_secret,
-            "token_payload": token_payload,
-        }
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON in token_payload: %s", args.token_payload)
-        return
+    credentials = {
+        "endpoint": args.endpoint,
+        "api_secret": args.api_secret,
+        "token_payload": token_payload,
+    }
 
     server.main(
         credentials,

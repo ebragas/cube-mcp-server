@@ -32,7 +32,7 @@ def _sanitize_response_for_logging(self, response: dict) -> dict:
 logger.error("Full response: %s", json.dumps(self._sanitize_response_for_logging(response)))
 ```
 
-### 2. **Token Payload Exposure in Error Messages** ⬜
+### 2. **Token Payload Exposure in Error Messages** ✅
 **File:** `src/mcp_cube_server/__init__.py:88`
 
 **Issue:** `token_payload` might be logged in error messages.
