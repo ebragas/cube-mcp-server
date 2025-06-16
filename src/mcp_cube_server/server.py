@@ -202,19 +202,6 @@ class CubeClient:
         return response
 
 
-class Filter(BaseModel):
-    dimension: str = Field(..., description="Name of the time dimension")
-    granularity: Literal["second", "minute", "hour", "day", "week", "month", "quarter", "year"] = Field(
-        ..., description="Time granularity"
-    )
-    dateRange: Union[list[str], str] = Field(
-        ...,
-        description="Pair of dates ISO dates representing the start and end of the range. Alternatively, a string representing a relative date range of the form: 'last N days', 'today', 'yesterday', 'last year', etc.",
-    )
-
-    model_config = ConfigDict()
-
-
 class TimeDimension(BaseModel):
     dimension: str = Field(..., description="Name of the time dimension")
     granularity: Literal["second", "minute", "hour", "day", "week", "month", "quarter", "year"] = Field(
@@ -233,7 +220,7 @@ class Query(BaseModel):
     measures: list[str] = Field([], description="Names of measures to query")
     dimensions: list[str] = Field([], description="Names of dimensions to group by")
     timeDimensions: list[TimeDimension] = Field([], description="Time dimensions to group by")
-    # filters: list[Filter] = Field([], description="Filters to apply to the query")
+    # filters: list[TimeDimension] = Field([], description="Filters to apply to the query")  # TODO: Implement filters using TimeDimension structure or create dedicated Filter class if needed
     limit: Optional[int] = Field(500, description="Maximum number of rows to return. Defaults to 500")
     offset: Optional[int] = Field(0, description="Number of rows to skip. Defaults to 0")
     order: dict[str, Literal["asc", "desc"]] = Field(
