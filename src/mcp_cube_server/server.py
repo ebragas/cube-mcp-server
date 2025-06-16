@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal, Optional, Union
 from pydantic import ConfigDict
 from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent, EmbeddedResource, TextResourceContents
+from mcp.types import TextContent
 import jwt
 from pydantic import BaseModel, Field
 import requests
@@ -283,7 +283,7 @@ def main(credentials, logger):
         return {"type": "text", "text": data_description()}
 
     @mcp.tool("read_data")
-    def read_data(query: Query) -> Union[str, list[Union[TextContent, EmbeddedResource]]]:
+    def read_data(query: Query) -> Union[str, list[TextContent]]:
         """Read data from Cube."""
         try:
             query_dict = query.model_dump(by_alias=True, exclude_none=True)
@@ -297,12 +297,7 @@ def main(credentials, logger):
             logger.info("read_data returned %s rows", len(data))
 
             data_id = str(uuid.uuid4())
-
-            @mcp.resource(f"data://{data_id}")
-            def data_resource() -> str:
-                return json.dumps(data)
-
-            logger.info("Added results as resource with ID: %s", data_id)
+            logger.info("Query executed successfully, returning %s rows with ID: %s", len(data), data_id)
 
             output = {
                 "type": "data",
@@ -313,10 +308,7 @@ def main(credentials, logger):
             json_output = json.dumps(output)
             return [
                 TextContent(type="text", text=yaml_output),
-                EmbeddedResource(
-                    type="resource",
-                    resource=TextResourceContents(uri=f"data://{data_id}", text=json_output),  # type: ignore
-                ),
+                TextContent(type="text", text=f"JSON Data (ID: {data_id}):\n{json_output}"),
             ]
 
         except Exception as e:
