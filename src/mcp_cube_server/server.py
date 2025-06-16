@@ -56,6 +56,30 @@ class CubeClient:
             sanitized['Authorization'] = '[REDACTED]'
         return sanitized
 
+    def _sanitize_response_for_logging(self, response: dict) -> dict:
+        """Sanitize response data for safe logging"""
+        sanitized = response.copy()
+        
+        # Redact or truncate large data arrays to prevent sensitive data exposure
+        if 'data' in sanitized and sanitized['data']:
+            data_size = len(sanitized['data'])
+            if data_size > 0:
+                # Always truncate data for security - only show count and structure info
+                sanitized['data'] = f"[DATA REDACTED - {data_size} rows]"
+        
+        # Redact any other potentially sensitive fields
+        sensitive_fields = ['token', 'secret', 'key', 'password', 'auth']
+        for field in sensitive_fields:
+            if field in sanitized:
+                sanitized[field] = '[REDACTED]'
+        
+        # Truncate very long string values that might contain sensitive data
+        for key, value in sanitized.items():
+            if isinstance(value, str) and len(value) > 500:
+                sanitized[key] = value[:200] + f"... [TRUNCATED - original length: {len(value)}]"
+        
+        return sanitized
+
     def _validate_jwt_token(self, token: str) -> bool:
         """Validate JWT token structure and basic claims without verifying signature"""
         if not token:
@@ -233,7 +257,7 @@ def main(credentials, logger):
         meta = client.describe()
         if error := meta.get("error"):
             logger.error("Error in data_description: %s\n\n%s", error, meta.get("stack"))
-            logger.error("Full response: %s", json.dumps(meta))
+            logger.error("Full response: %s", json.dumps(client._sanitize_response_for_logging(meta)))
             return f"Error: Description of the data is not available: {error}, {meta}"
 
         description = []
@@ -280,7 +304,7 @@ def main(credentials, logger):
             response = client.query(query_dict)
             if error := response.get("error"):
                 logger.error("Error in read_data: %s\n\n%s", error, response.get("stack"))
-                logger.error("Full response: %s", json.dumps(response))
+                logger.error("Full response: %s", json.dumps(client._sanitize_response_for_logging(response)))
                 return f"Error: {error}"
             data = response.get("data", [])
             logger.info("read_data returned %s rows", len(data))
