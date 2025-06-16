@@ -101,7 +101,6 @@ class CubeClient:
                 return False
                 
             # Check token expiration
-            import time
             exp_claim = decoded.get('exp')
             if exp_claim is None or exp_claim < time.time():
                 return False
